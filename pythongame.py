@@ -208,8 +208,12 @@ def selected_skin(profile):
     return next((skin for skin in SKINS if skin["id"] == profile["skin"]), SKINS[0])
 
 
-def award_run_coins(profile, score):
-    earned = max(1, score // 10)
+def coin_rate(state):
+    return 4 ** state["continues"]
+
+
+def award_run_coins(profile, score, state):
+    earned = max(1, (score // 10) // coin_rate(state))
     profile["coins"] += earned
     save_profile(profile)
     return earned
@@ -1029,7 +1033,7 @@ def main():
             if state["lives"] <= 0:
                 high_score = max(high_score, state["score"])
                 save_high_score(high_score)
-                state["coins_earned"] = award_run_coins(profile, state["score"])
+                state["coins_earned"] = award_run_coins(profile, state["score"], state)
                 state["explosion_started"] = pygame.time.get_ticks()
                 stop_music()
                 mode = "gameover"
@@ -1039,7 +1043,8 @@ def main():
                 overlay("PAUSED", "ESC  RESUME     M  MAIN MENU", CYAN)
             elif mode == "gameover":
                 overlay("RUN OVER", f"SCORE {state['score']:06d}   BEST {high_score:06d}   //   ENTER RETRY   M MENU", PINK)
-                draw_text(f"+{state['coins_earned']} COINS   /   WALLET {profile['coins']}", SMALL,
+                rate = f"1/{coin_rate(state)} RATE" if state["continues"] else "FULL RATE"
+                draw_text(f"+{state['coins_earned']} COINS   /   {rate}   /   WALLET {profile['coins']}", SMALL,
                           YELLOW, (WIDTH // 2, 405))
                 cost = continue_cost(state)
                 can_continue = profile["coins"] >= cost
