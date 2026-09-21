@@ -68,6 +68,7 @@ DEATH_ANIMATIONS = (
     {"id": "blackhole", "name": "BLACK HOLE", "price": 1400, "min_score": 5000, "colour": (130, 90, 227)},
     {"id": "laser", "name": "LASER GRID", "price": 2000, "min_score": 9000, "colour": (255, 80, 120)},
 )
+CONTINUE_COSTS = (1000, 4000, 16000, 120000)
 
 
 def move_game_window(x, y):
@@ -214,6 +215,24 @@ def award_run_coins(profile, score):
     return earned
 
 
+def continue_cost(state):
+    return CONTINUE_COSTS[min(state["continues"], len(CONTINUE_COSTS) - 1)]
+
+
+def continue_game(state, profile):
+    cost = continue_cost(state)
+    if profile["coins"] < cost:
+        return False
+    profile["coins"] -= cost
+    save_profile(profile)
+    state["continues"] += 1
+    state["lives"] = 1
+    state["invincible"] = 1.5
+    state["explosion_started"] = None
+    start_music()
+    return True
+
+
 def draw_text(message, font, colour, position, anchor="center"):
     image = font.render(message, True, colour)
     screen.blit(image, image.get_rect(**{anchor: position}))
@@ -301,7 +320,7 @@ def new_game(profile):
             "road_speed": 1.0,
             "invincible": 0.0, "shake": 0.0, "flash": 0.0, "last_milestone": 0,
             "explosion_started": None, "boosting": False,
-            "death_animation": profile["death"]}
+            "death_animation": profile["death"], "continues": 0}
 
 
 def add_particle(state, position, colour, amount=8, force=1.0):
@@ -983,6 +1002,9 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN and mode in ("menu", "gameover"):
                     state, mode = new_game(profile), "playing"
+                elif mode == "gameover" and event.key == pygame.K_c:
+                    if continue_game(state, profile):
+                        mode = "playing"
                 elif mode == "menu" and event.key == pygame.K_s:
                     shop_selected = 0
                     mode = "shop"
@@ -1019,6 +1041,10 @@ def main():
                 overlay("RUN OVER", f"SCORE {state['score']:06d}   BEST {high_score:06d}   //   ENTER RETRY   M MENU", PINK)
                 draw_text(f"+{state['coins_earned']} COINS   /   WALLET {profile['coins']}", SMALL,
                           YELLOW, (WIDTH // 2, 405))
+                cost = continue_cost(state)
+                can_continue = profile["coins"] >= cost
+                draw_text(f"C  CONTINUE FOR {cost} COINS  ->  1 LIFE",
+                          SMALL, CYAN if can_continue else RED, (WIDTH // 2, 430))
                 draw_explosion(state)
         elif mode == "shop":
             shop_screen(profile, high_score, shop_selected)
