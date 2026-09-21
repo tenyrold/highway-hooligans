@@ -7,7 +7,6 @@ from array import array
 from colorsys import hsv_to_rgb
 from ctypes import wintypes
 from pathlib import Path
-
 import pygame
 
 WIDTH, HEIGHT = 960, 640
@@ -54,21 +53,21 @@ crash_sound = None
 
 SKINS = (
     {"id": "neon", "name": "NEON CYAN", "price": 0, "min_score": 0, "colour": CYAN},
-    {"id": "inferno", "name": "INFERNO", "price": 180, "min_score": 250, "colour": (255, 92, 48)},
-    {"id": "violet", "name": "VIOLET VOLT", "price": 350, "min_score": 750, "colour": (168, 89, 227)},
-    {"id": "rainbow", "name": "PRISM RUSH", "price": 1000, "min_score": 3000, "colour": PINK},
-    {"id": "aurora", "name": "AURORA SHIFT", "price": 1500, "min_score": 6000, "colour": (75, 220, 180)},
-    {"id": "gold", "name": "GOLD STANDARD", "price": 2200, "min_score": 10000, "colour": (255, 193, 48)},
+    {"id": "inferno", "name": "INFERNO", "price": 360, "min_score": 500, "colour": (255, 92, 48)},
+    {"id": "violet", "name": "VIOLET VOLT", "price": 700, "min_score": 1500, "colour": (168, 89, 227)},
+    {"id": "rainbow", "name": "PRISM RUSH", "price": 2000, "min_score": 6000, "colour": PINK},
+    {"id": "aurora", "name": "AURORA SHIFT", "price": 3000, "min_score": 12000, "colour": (75, 220, 180)},
+    {"id": "gold", "name": "GOLD STANDARD", "price": 4400, "min_score": 20000, "colour": (255, 193, 48)},
 )
 DEATH_ANIMATIONS = (
     {"id": "standard", "name": "STREET CRASH", "price": 0, "min_score": 0, "colour": RED},
-    {"id": "shockwave", "name": "SHOCKWAVE", "price": 260, "min_score": 500, "colour": CYAN},
-    {"id": "fireworks", "name": "FIREWORKS", "price": 500, "min_score": 1200, "colour": PINK},
-    {"id": "pixel", "name": "PIXEL BURST", "price": 850, "min_score": 2500, "colour": YELLOW},
-    {"id": "blackhole", "name": "BLACK HOLE", "price": 1400, "min_score": 5000, "colour": (130, 90, 227)},
-    {"id": "laser", "name": "LASER GRID", "price": 2000, "min_score": 9000, "colour": (255, 80, 120)},
+    {"id": "shockwave", "name": "SHOCKWAVE", "price": 520, "min_score": 1000, "colour": CYAN},
+    {"id": "fireworks", "name": "FIREWORKS", "price": 1000, "min_score": 2400, "colour": PINK},
+    {"id": "pixel", "name": "PIXEL BURST", "price": 1700, "min_score": 5000, "colour": YELLOW},
+    {"id": "blackhole", "name": "BLACK HOLE", "price": 2800, "min_score": 10000, "colour": (130, 90, 227)},
+    {"id": "laser", "name": "LASER GRID", "price": 4000, "min_score": 18000, "colour": (255, 80, 120)},
 )
-CONTINUE_COSTS = (1000, 4000, 16000, 120000)
+CONTINUE_COSTS = (4000, 8000, 16000, 32000)
 
 
 def move_game_window(x, y):
