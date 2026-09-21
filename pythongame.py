@@ -1,9 +1,11 @@
 import math
 import json
+import ctypes
 import random
 import sys
 from array import array
 from colorsys import hsv_to_rgb
+from ctypes import wintypes
 from pathlib import Path
 
 import pygame
@@ -19,6 +21,16 @@ pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("HIGHWAY HOOLIGANS // NIGHT RUN")
 clock = pygame.time.Clock()
+window_handle = pygame.display.get_wm_info().get("window")
+if sys.platform == "win32" and window_handle:
+    window_rect = wintypes.RECT()
+    ctypes.windll.user32.GetWindowRect(window_handle, ctypes.byref(window_rect))
+    window_origin = (window_rect.left, window_rect.top)
+else:
+    window_origin = (0, 0)
+window_shake_time = 0.0
+window_shake_power = 0
+window_shake_clock = 0.0
 FONT = pygame.font.SysFont("consolas", 20, bold=True)
 SMALL = pygame.font.SysFont("consolas", 15, bold=True)
 TITLE = pygame.font.SysFont("impact", 76)
@@ -56,6 +68,39 @@ DEATH_ANIMATIONS = (
     {"id": "blackhole", "name": "BLACK HOLE", "price": 1400, "min_score": 5000, "colour": (130, 90, 227)},
     {"id": "laser", "name": "LASER GRID", "price": 2000, "min_score": 9000, "colour": (255, 80, 120)},
 )
+
+
+def move_game_window(x, y):
+    if sys.platform != "win32" or window_handle is None:
+        return
+    flags = 0x0001 | 0x0004 | 0x0010
+    ctypes.windll.user32.SetWindowPos(window_handle, 0, int(x), int(y), 0, 0, flags)
+
+
+def shake_game_window(power=10):
+    global window_shake_time, window_shake_power, window_shake_clock
+    window_shake_time = 0.38
+    window_shake_power = max(window_shake_power, power)
+    window_shake_clock = 0.0
+
+
+def update_window_shake(dt):
+    global window_shake_time, window_shake_power, window_shake_clock
+    if window_shake_time <= 0:
+        move_game_window(*window_origin)
+        window_shake_power = 0
+        return
+    window_shake_time -= dt
+    window_shake_clock += dt
+    x, y = window_origin
+    fade = min(1.0, window_shake_time / .08)
+    offset_x = math.sin(window_shake_clock * 34) * window_shake_power * fade
+    offset_y = math.sin(window_shake_clock * 27) * window_shake_power * .7 * fade
+    move_game_window(x + offset_x, y + offset_y)
+
+
+def reset_game_window():
+    move_game_window(*window_origin)
 
 
 def make_track(notes, beat_length):
@@ -683,6 +728,7 @@ def update_game(state, dt):
                 add_particle(state, player["rect"].center, YELLOW, 10)
         if state["invincible"] <= 0 and player["rect"].colliderect(car["rect"]):
             state["traffic"].remove(car)
+            shake_game_window(8 if state["shield"] > 0 else 6)
             if state["shield"] > 0:
                 state["score"] += 35 * state["combo"]
                 add_particle(state, player["rect"].center, CYAN, 26, 1.3)
@@ -928,8 +974,10 @@ def main():
     shop_selected = 0
     while True:
         dt = min(clock.tick(FPS) / 1000, .05)
+        update_window_shake(dt)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                reset_game_window()
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
