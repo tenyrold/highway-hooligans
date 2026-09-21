@@ -1,4 +1,5 @@
 import math
+import json
 import random
 import sys
 from array import array
@@ -12,6 +13,7 @@ ROAD = pygame.Rect(190, 0, 580, HEIGHT)
 LANES = [260, 405, 550, 695]
 FPS = 60
 SAVE_FILE = Path(__file__).with_name("highway_hooligans_highscore.txt")
+PROFILE_FILE = Path(__file__).with_name("highway_hooligans_profile.json")
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -37,6 +39,23 @@ SHIFT_WARNING_FLASH = SHIFT_WARNING_DURATION / 6
 audio_channel = None
 audio_tracks = {}
 crash_sound = None
+
+SKINS = (
+    {"id": "neon", "name": "NEON CYAN", "price": 0, "min_score": 0, "colour": CYAN},
+    {"id": "inferno", "name": "INFERNO", "price": 180, "min_score": 250, "colour": (255, 92, 48)},
+    {"id": "violet", "name": "VIOLET VOLT", "price": 350, "min_score": 750, "colour": (168, 89, 227)},
+    {"id": "rainbow", "name": "PRISM RUSH", "price": 1000, "min_score": 3000, "colour": PINK},
+    {"id": "aurora", "name": "AURORA SHIFT", "price": 1500, "min_score": 6000, "colour": (75, 220, 180)},
+    {"id": "gold", "name": "GOLD STANDARD", "price": 2200, "min_score": 10000, "colour": (255, 193, 48)},
+)
+DEATH_ANIMATIONS = (
+    {"id": "standard", "name": "STREET CRASH", "price": 0, "min_score": 0, "colour": RED},
+    {"id": "shockwave", "name": "SHOCKWAVE", "price": 260, "min_score": 500, "colour": CYAN},
+    {"id": "fireworks", "name": "FIREWORKS", "price": 500, "min_score": 1200, "colour": PINK},
+    {"id": "pixel", "name": "PIXEL BURST", "price": 850, "min_score": 2500, "colour": YELLOW},
+    {"id": "blackhole", "name": "BLACK HOLE", "price": 1400, "min_score": 5000, "colour": (130, 90, 227)},
+    {"id": "laser", "name": "LASER GRID", "price": 2000, "min_score": 9000, "colour": (255, 80, 120)},
+)
 
 
 def make_track(notes, beat_length):
@@ -110,6 +129,46 @@ def save_high_score(score):
         pass
 
 
+def load_profile():
+    default = {"coins": 0, "owned_skins": ["neon"],
+               "owned_deaths": ["standard"], "skin": "neon", "death": "standard"}
+    try:
+        profile = json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
+        for key, value in default.items():
+            profile.setdefault(key, value)
+        valid_skin_ids = {skin["id"] for skin in SKINS}
+        valid_death_ids = {animation["id"] for animation in DEATH_ANIMATIONS}
+        profile["owned_skins"] = [skin_id for skin_id in profile["owned_skins"]
+                                   if skin_id in valid_skin_ids]
+        profile["owned_deaths"] = [death_id for death_id in profile["owned_deaths"]
+                                    if death_id in valid_death_ids]
+        if profile["skin"] not in valid_skin_ids:
+            profile["skin"] = "neon"
+        if profile["death"] not in valid_death_ids:
+            profile["death"] = "standard"
+        return profile
+    except (OSError, ValueError, TypeError):
+        return default
+
+
+def save_profile(profile):
+    try:
+        PROFILE_FILE.write_text(json.dumps(profile), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def selected_skin(profile):
+    return next((skin for skin in SKINS if skin["id"] == profile["skin"]), SKINS[0])
+
+
+def award_run_coins(profile, score):
+    earned = max(1, score // 10)
+    profile["coins"] += earned
+    save_profile(profile)
+    return earned
+
+
 def draw_text(message, font, colour, position, anchor="center"):
     image = font.render(message, True, colour)
     screen.blit(image, image.get_rect(**{anchor: position}))
@@ -165,7 +224,7 @@ def draw_city_sign(rect, label, colour, flip=False):
                          (rect.right + 8, rect.bottom + 7), 2)
 
 
-def make_car(x, y, colour, kind="traffic", lane=None, can_shift=None):
+def make_car(x, y, colour, kind="traffic", lane=None, can_shift=None, skin_id=None):
     if kind == "player":
         width, height = 48, 82
     elif kind == "truck":
@@ -174,6 +233,7 @@ def make_car(x, y, colour, kind="traffic", lane=None, can_shift=None):
         width, height = 46, 78
     lane = lane if lane is not None else LANES.index(x)
     return {"rect": pygame.Rect(x - width // 2, y, width, height), "colour": colour,
+            "skin_id": skin_id,
             "kind": kind, "lane": lane, "target_lane": lane,
             "target_x": float(x),
             "lane_change_timer": random.uniform(.8, 2.2),
@@ -186,14 +246,17 @@ def make_car(x, y, colour, kind="traffic", lane=None, can_shift=None):
             "near": False}
 
 
-def new_game():
-    return {"player": make_car(LANES[1], HEIGHT - 125, CYAN, "player", 1),
+def new_game(profile):
+    skin = selected_skin(profile)
+    return {"player": make_car(LANES[1], HEIGHT - 125, skin["colour"], "player", 1,
+                                skin_id=skin["id"]),
             "traffic": [], "pickups": [], "particles": [], "score": 0,
             "combo": 1, "lives": 3, "distance": 0.0, "spawn_timer": .4,
             "pickup_timer": 6.0, "boost": 100.0, "shield": 0.0,
             "road_speed": 1.0,
             "invincible": 0.0, "shake": 0.0, "flash": 0.0, "last_milestone": 0,
-            "explosion_started": None, "boosting": False}
+            "explosion_started": None, "boosting": False,
+            "death_animation": profile["death"]}
 
 
 def add_particle(state, position, colour, amount=8, force=1.0):
@@ -278,13 +341,54 @@ def draw_background(state, offset):
                 pygame.draw.line(screen, (70, 155, 160), (x, y), (x, y + 28), 2)
 
 
+def draw_skin_body(car):
+    rect = car["rect"]
+    skin_id = car.get("skin_id")
+    if skin_id == "neon":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            pulse = (math.sin(pygame.time.get_ticks() / 260 + y / 18) + 1) / 2
+            colour = (int(24 + pulse * 35), int(170 + pulse * 54), int(174 + pulse * 55))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    elif skin_id == "inferno":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            heat = (math.sin(pygame.time.get_ticks() / 420 + y / 13) + 1) / 2
+            colour = (255, int(52 + heat * 100), int(28 + heat * 28))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    elif skin_id == "violet":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            shimmer = (math.sin(pygame.time.get_ticks() / 330 + y / 16) + 1) / 2
+            colour = (int(108 + shimmer * 95), int(42 + shimmer * 55), int(175 + shimmer * 65))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    elif skin_id == "rainbow":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            hue = (y / 180 + pygame.time.get_ticks() / 3600) % 1.0
+            colour = tuple(int(channel * 255) for channel in hsv_to_rgb(hue, .8, 1.0))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    elif skin_id == "aurora":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            wave = (math.sin(pygame.time.get_ticks() / 500 + y / 15) + 1) / 2
+            colour = (int(38 + wave * 62), int(145 + wave * 80), int(175 + wave * 55))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    elif skin_id == "gold":
+        for y in range(rect.top + 2, rect.bottom - 1):
+            shine = (math.sin(pygame.time.get_ticks() / 280 + y / 12) + 1) / 2
+            colour = (255, int(146 + shine * 88), int(22 + shine * 70))
+            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
+    else:
+        pygame.draw.rect(screen, car["colour"], rect,
+                         border_radius=6 if car["kind"] == "truck" else 10)
+
+
 def draw_car(car, glow=False):
     rect, colour = car["rect"], car["colour"]
     shifting = car["target_lane"] != car["lane"]
     if glow:
         pygame.draw.rect(screen, (25, 110, 125), rect.inflate(22, 22), 2, border_radius=15)
         pygame.draw.rect(screen, (70, 220, 213), rect.inflate(13, 13), 2, border_radius=12)
-    pygame.draw.rect(screen, colour, rect, border_radius=6 if car["kind"] == "truck" else 10)
+    if car["kind"] == "player":
+        draw_skin_body(car)
+    else:
+        pygame.draw.rect(screen, colour, rect, border_radius=6 if car["kind"] == "truck" else 10)
     pygame.draw.rect(screen, (255, 255, 255), rect, 2,
                      border_radius=6 if car["kind"] == "truck" else 10)
     pygame.draw.line(screen, tuple(min(255, channel + 55) for channel in colour),
@@ -317,6 +421,41 @@ def draw_car(car, glow=False):
                   (indicator_x + side * 9, rect.centery),
                   (indicator_x, rect.centery + 8)]
         pygame.draw.polygon(screen, indicator_colour, points)
+
+
+def draw_skin_preview(item, centre):
+    rect = pygame.Rect(centre[0] - 12, centre[1] - 11, 24, 22)
+    preview_car = {"rect": rect, "colour": item["colour"], "kind": "player",
+                   "skin_id": item["id"]}
+    draw_skin_body(preview_car)
+    pygame.draw.rect(screen, WHITE, rect, 1, border_radius=4)
+
+
+def draw_death_preview(item, centre):
+    pulse = 8 + int((pygame.time.get_ticks() / 120) % 8)
+    colour = item["colour"]
+    if item["id"] == "standard":
+        pygame.draw.circle(screen, YELLOW, centre, pulse, 2)
+        pygame.draw.circle(screen, RED, centre, max(3, pulse - 5), 2)
+    elif item["id"] == "shockwave":
+        pygame.draw.circle(screen, colour, centre, pulse, 3)
+        pygame.draw.circle(screen, WHITE, centre, max(3, pulse - 6), 1)
+    elif item["id"] == "fireworks":
+        for angle in range(0, 360, 60):
+            direction = pygame.Vector2(1, 0).rotate(angle)
+            pygame.draw.line(screen, colour, centre + direction * 5,
+                             centre + direction * pulse, 2)
+    elif item["id"] == "pixel":
+        pygame.draw.rect(screen, colour, (centre[0] - pulse // 2, centre[1] - pulse // 2,
+                                          pulse, pulse), 3)
+    elif item["id"] == "blackhole":
+        pygame.draw.circle(screen, (12, 8, 28), centre, max(4, pulse - 4))
+        pygame.draw.circle(screen, colour, centre, pulse, 2)
+    elif item["id"] == "laser":
+        pygame.draw.line(screen, colour, (centre[0] - pulse, centre[1] - pulse),
+                         (centre[0] + pulse, centre[1] + pulse), 2)
+        pygame.draw.line(screen, WHITE, (centre[0] - pulse, centre[1] + pulse),
+                         (centre[0] + pulse, centre[1] - pulse), 1)
 
 
 def draw_nitro_effect(player):
@@ -631,14 +770,47 @@ def draw_explosion(state):
     if elapsed >= 1.8:
         return
     centre = state["player"]["rect"].center
+    animation = state["death_animation"]
     radius = int(25 + elapsed * 230)
-    pygame.draw.circle(screen, YELLOW, centre, radius, 5)
-    pygame.draw.circle(screen, RED, centre, max(8, radius - 20), 4)
-    if elapsed < .7:
-        pygame.draw.circle(screen, (255, 240, 180), centre, int(35 + elapsed * 80))
+    if animation == "shockwave":
+        pygame.draw.circle(screen, CYAN, centre, radius, 8)
+        pygame.draw.circle(screen, WHITE, centre, max(8, radius - 35), 2)
+        for angle in range(0, 360, 45):
+            direction = pygame.Vector2(1, 0).rotate(angle)
+            pygame.draw.line(screen, CYAN, centre + direction * radius,
+                             centre + direction * (radius + 30), 3)
+    elif animation == "fireworks":
+        for angle in range(0, 360, 30):
+            direction = pygame.Vector2(1, 0).rotate(angle)
+            pygame.draw.line(screen, PINK, centre + direction * radius,
+                             centre + direction * (radius + 34), 4)
+        pygame.draw.circle(screen, YELLOW, centre, max(8, int(42 - elapsed * 14)), 5)
+    elif animation == "pixel":
+        for angle in range(0, 360, 30):
+            direction = pygame.Vector2(1, 0).rotate(angle)
+            point = centre + direction * radius
+            pygame.draw.rect(screen, YELLOW, (int(point.x - 7), int(point.y - 7), 14, 14))
+        pygame.draw.rect(screen, WHITE, (centre[0] - 15, centre[1] - 15, 30, 30), 4)
+    elif animation == "blackhole":
+        pygame.draw.circle(screen, (12, 8, 28), centre, max(10, radius - 28))
+        pygame.draw.circle(screen, (130, 90, 227), centre, radius, 5)
+        pygame.draw.circle(screen, PINK, centre, max(8, radius - 48), 3)
+    elif animation == "laser":
+        pulse = int((elapsed * 10) % 2)
+        for index in range(-3, 4):
+            y = centre[1] + index * 18 + pulse * 5
+            pygame.draw.line(screen, (255, 80, 120), (centre[0] - radius, y),
+                             (centre[0] + radius, y), 3)
+        pygame.draw.line(screen, WHITE, (centre[0] - radius, centre[1] - radius),
+                         (centre[0] + radius, centre[1] + radius), 3)
+    else:
+        pygame.draw.circle(screen, YELLOW, centre, radius, 5)
+        pygame.draw.circle(screen, RED, centre, max(8, radius - 20), 4)
+        if elapsed < .7:
+            pygame.draw.circle(screen, (255, 240, 180), centre, int(35 + elapsed * 80))
 
 
-def menu_screen(high_score):
+def menu_screen(high_score, profile):
     pulse = (math.sin(pygame.time.get_ticks() / 280) + 1) / 2
     screen.fill((5, 11, 22))
     draw_light_beams((45, 224, 213), 18)
@@ -665,11 +837,79 @@ def menu_screen(high_score):
     draw_text("BOOST", SMALL, (137, 155, 168), (WIDTH // 2 + 55, 435))
     draw_text("SPACE", SMALL, YELLOW, (WIDTH // 2 + 126, 435))
     draw_text("ESC  PAUSE", SMALL, CYAN, (WIDTH // 2, 466))
+    draw_text("S  SHOP", SMALL, CYAN, (WIDTH // 2 + 150, 466))
     draw_text(f"ALL-TIME BEST  {high_score:06d}", SMALL, (137, 155, 168), (WIDTH // 2, 535))
+    draw_text("COINS  {0:04d}".format(profile["coins"]), SMALL, YELLOW,
+              (WIDTH // 2, 557))
     draw_text("// SYSTEM READY //", SMALL, (70, 220, 198), (WIDTH // 2, 578))
     draw_text("LIGHTS ON  //  ENGINE HOT  //  ROAD OPEN", SMALL, (137, 155, 168),
               (WIDTH // 2, 603))
     draw_scanlines(10)
+
+
+def shop_items(profile, high_score):
+    return [("CAR SKINS", skin, "skin", skin["id"] in profile["owned_skins"],
+             high_score >= skin["min_score"])
+            for skin in SKINS] + [("DEATH ANIMATIONS", animation, "death",
+                                   animation["id"] in profile["owned_deaths"],
+                                   high_score >= animation["min_score"])
+                                  for animation in DEATH_ANIMATIONS]
+
+
+def shop_screen(profile, high_score, selected):
+    screen.fill((5, 11, 22))
+    draw_light_beams(PINK, 16)
+    draw_text("NIGHT MARKET", TITLE, WHITE, (WIDTH // 2, 72))
+    draw_text("BUY THE LOOK. OWN THE EXIT.", SMALL, CYAN, (WIDTH // 2, 126))
+    draw_text(f"WALLET  {profile['coins']:04d} COINS", FONT, YELLOW, (WIDTH - 28, 28), "topright")
+    items = shop_items(profile, high_score)
+    row_height = 34
+    for index, (category, item, item_type, owned, unlocked) in enumerate(items):
+        section_offset = 18 if item_type == "death" else 0
+        y = 155 + index * row_height + section_offset
+        is_selected = index == selected
+        colour = YELLOW if is_selected else (56, 91, 104)
+        panel = pygame.Rect(170, y, 620, 29)
+        draw_panel(panel, (13, 28, 39) if is_selected else (9, 20, 31), colour)
+        if index == 0 or item_type != items[index - 1][2]:
+            draw_text(category, SMALL, PINK if item_type == "death" else CYAN, (182, y - 14), "topleft")
+        pygame.draw.rect(screen, item["colour"], (190, y + 7, 14, 14), border_radius=3)
+        draw_text(item["name"], SMALL, WHITE, (220, y + 14), "midleft")
+        requirement = "NO SCORE GATE" if item["min_score"] == 0 else f"REQ SCORE {item['min_score']}"
+        requirement_colour = (96, 125, 135) if unlocked else PINK
+        draw_text(requirement, SMALL, requirement_colour, (500, y + 14), "midleft")
+        if not unlocked:
+            status, status_colour = "LOCKED", PINK
+        elif profile[item_type] == item["id"]:
+            status, status_colour = "EQUIPPED", CYAN
+        elif owned:
+            status, status_colour = "EQUIP", WHITE
+        else:
+            status, status_colour = f"{item['price']} COINS", YELLOW
+        draw_text(status, SMALL, status_colour, (760, y + 14), "midright")
+        preview_center = (825, y + 14)
+        if item_type == "skin":
+            draw_skin_preview(item, preview_center)
+        else:
+            draw_death_preview(item, preview_center)
+    draw_text("UP / DOWN  SELECT     ENTER  BUY / EQUIP     M  MENU", SMALL,
+              (137, 155, 168), (WIDTH // 2, HEIGHT - 28))
+    draw_scanlines(10)
+
+
+def use_shop_selection(profile, high_score, selected):
+    _, item, item_type, owned, unlocked = shop_items(profile, high_score)[selected]
+    owned_key = "owned_skins" if item_type == "skin" else "owned_deaths"
+    if not unlocked:
+        return
+    if owned:
+        profile[item_type] = item["id"]
+        save_profile(profile)
+    elif profile["coins"] >= item["price"]:
+        profile["coins"] -= item["price"]
+        profile[owned_key].append(item["id"])
+        profile[item_type] = item["id"]
+        save_profile(profile)
 
 
 def overlay(title, subtitle, colour):
@@ -691,7 +931,9 @@ def overlay(title, subtitle, colour):
 
 def main():
     start_music()
-    state, mode, high_score = new_game(), "menu", load_high_score()
+    profile = load_profile()
+    state, mode, high_score = new_game(profile), "menu", load_high_score()
+    shop_selected = 0
     while True:
         dt = min(clock.tick(FPS) / 1000, .05)
         for event in pygame.event.get():
@@ -700,7 +942,18 @@ def main():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN and mode in ("menu", "gameover"):
-                    state, mode = new_game(), "playing"
+                    state, mode = new_game(profile), "playing"
+                elif mode == "menu" and event.key == pygame.K_s:
+                    shop_selected = 0
+                    mode = "shop"
+                elif mode == "shop" and event.key in (pygame.K_UP, pygame.K_w):
+                    shop_selected = (shop_selected - 1) % len(shop_items(profile, high_score))
+                elif mode == "shop" and event.key in (pygame.K_DOWN, pygame.K_s):
+                    shop_selected = (shop_selected + 1) % len(shop_items(profile, high_score))
+                elif mode == "shop" and event.key == pygame.K_RETURN:
+                    use_shop_selection(profile, high_score, shop_selected)
+                elif mode == "shop" and event.key in (pygame.K_m, pygame.K_ESCAPE):
+                    mode = "menu"
                 elif mode == "playing" and event.key in (pygame.K_LEFT, pygame.K_a):
                     switch_player_lane(state["player"], -1)
                 elif mode == "playing" and event.key in (pygame.K_RIGHT, pygame.K_d):
@@ -714,6 +967,7 @@ def main():
             if state["lives"] <= 0:
                 high_score = max(high_score, state["score"])
                 save_high_score(high_score)
+                state["coins_earned"] = award_run_coins(profile, state["score"])
                 state["explosion_started"] = pygame.time.get_ticks()
                 stop_music()
                 mode = "gameover"
@@ -723,9 +977,13 @@ def main():
                 overlay("PAUSED", "ESC  RESUME     M  MAIN MENU", CYAN)
             elif mode == "gameover":
                 overlay("RUN OVER", f"SCORE {state['score']:06d}   BEST {high_score:06d}   //   ENTER RETRY   M MENU", PINK)
+                draw_text(f"+{state['coins_earned']} COINS   /   WALLET {profile['coins']}", SMALL,
+                          YELLOW, (WIDTH // 2, 405))
                 draw_explosion(state)
+        elif mode == "shop":
+            shop_screen(profile, high_score, shop_selected)
         else:
-            menu_screen(high_score)
+            menu_screen(high_score, profile)
         pygame.display.flip()
 
 
