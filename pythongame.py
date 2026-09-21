@@ -344,39 +344,31 @@ def draw_background(state, offset):
 def draw_skin_body(car):
     rect = car["rect"]
     skin_id = car.get("skin_id")
-    if skin_id == "neon":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            pulse = (math.sin(pygame.time.get_ticks() / 260 + y / 18) + 1) / 2
-            colour = (int(24 + pulse * 35), int(170 + pulse * 54), int(174 + pulse * 55))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    elif skin_id == "inferno":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            heat = (math.sin(pygame.time.get_ticks() / 420 + y / 13) + 1) / 2
-            colour = (255, int(52 + heat * 100), int(28 + heat * 28))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    elif skin_id == "violet":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            shimmer = (math.sin(pygame.time.get_ticks() / 330 + y / 16) + 1) / 2
-            colour = (int(108 + shimmer * 95), int(42 + shimmer * 55), int(175 + shimmer * 65))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    elif skin_id == "rainbow":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            hue = (y / 180 + pygame.time.get_ticks() / 3600) % 1.0
-            colour = tuple(int(channel * 255) for channel in hsv_to_rgb(hue, .8, 1.0))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    elif skin_id == "aurora":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            wave = (math.sin(pygame.time.get_ticks() / 500 + y / 15) + 1) / 2
-            colour = (int(38 + wave * 62), int(145 + wave * 80), int(175 + wave * 55))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    elif skin_id == "gold":
-        for y in range(rect.top + 2, rect.bottom - 1):
-            shine = (math.sin(pygame.time.get_ticks() / 280 + y / 12) + 1) / 2
-            colour = (255, int(146 + shine * 88), int(22 + shine * 70))
-            pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
-    else:
+    if skin_id not in ("neon", "inferno", "violet", "rainbow", "aurora", "gold"):
         pygame.draw.rect(screen, car["colour"], rect,
                          border_radius=6 if car["kind"] == "truck" else 10)
+        return
+    now = pygame.time.get_ticks()
+    for y in range(rect.top + 2, rect.bottom - 1):
+        if skin_id == "neon":
+            pulse = (math.sin(now / 260 + y / 18) + 1) / 2
+            colour = (int(24 + pulse * 35), int(170 + pulse * 54), int(174 + pulse * 55))
+        elif skin_id == "inferno":
+            heat = (math.sin(now / 420 + y / 13) + 1) / 2
+            colour = (255, int(52 + heat * 100), int(28 + heat * 28))
+        elif skin_id == "violet":
+            shimmer = (math.sin(now / 330 + y / 16) + 1) / 2
+            colour = (int(108 + shimmer * 95), int(42 + shimmer * 55), int(175 + shimmer * 65))
+        elif skin_id == "rainbow":
+            hue = (y / 180 + now / 3600) % 1.0
+            colour = tuple(int(channel * 255) for channel in hsv_to_rgb(hue, .8, 1.0))
+        elif skin_id == "aurora":
+            wave = (math.sin(now / 500 + y / 15) + 1) / 2
+            colour = (int(38 + wave * 62), int(145 + wave * 80), int(175 + wave * 55))
+        else:
+            shine = (math.sin(now / 280 + y / 12) + 1) / 2
+            colour = (255, int(146 + shine * 88), int(22 + shine * 70))
+        pygame.draw.line(screen, colour, (rect.left + 2, y), (rect.right - 2, y))
 
 
 def draw_car(car, glow=False):
